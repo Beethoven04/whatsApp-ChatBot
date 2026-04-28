@@ -39,10 +39,13 @@ export function verifyWebhookSignature(req, res, next) {
     .update(rawBody)
     .digest('hex')}`;
 
-  const valid = crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expected)
-  );
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expected);
+
+  // timingSafeEqual throws RangeError if buffers differ in length
+  const valid =
+    sigBuf.length === expBuf.length &&
+    crypto.timingSafeEqual(sigBuf, expBuf);
 
   if (!valid) {
     logger.warn('Webhook signature mismatch — request rejected');

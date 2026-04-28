@@ -49,9 +49,17 @@ ${productContext}`;
     if (err.response?.status === 429) {
       logger.warn('OpenRouter rate limited — retrying in 60 seconds');
       await sleep(60_000);
-      return await callOpenRouter(userContent);
+      try {
+        return await callOpenRouter(userContent);
+      } catch (retryErr) {
+        // Second failure — skip AI entirely, escalate to manager
+        logger.error('OpenRouter rate limited twice — auto-escalating');
+        return escalationFallback('OpenRouter rate limit exceeded after retry');
+      }
     }
-    throw err;
+    // Any other error (network, auth, etc.) — escalate instead of crash
+    logger.error('OpenRouter call failed', { status: err.response?.status, message: err.message });
+    return escalationFallback(`AI service error: ${err.message}`);
   }
 }
 
@@ -76,7 +84,7 @@ async function callOpenRouter(userContent) {
       headers: {
         Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://fashion-store-bot.railway.app',
+        'HTTP-Referer': 'https://whatsapp-chatbot-production-0171.up.railway.app',
         'X-Title': 'Fashion Store WhatsApp Bot',
       },
       timeout: 30_000,

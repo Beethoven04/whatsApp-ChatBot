@@ -17,9 +17,14 @@ app.use(
   })
 );
 
-// Health check endpoint — used by Railway and uptime monitors
+// Root health check — Railway's default healthcheck hits /
+app.get('/', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Extended health check with uptime
 app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'ok', uptime: process.uptime() });
+  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
 // Main webhook route

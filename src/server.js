@@ -3,7 +3,24 @@ import logger from './utils/logger.js';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
-const server = app.listen(PORT, () => {
+// Validate required env variables and log any missing ones on startup
+const REQUIRED_VARS = [
+  'WHATSAPP_TOKEN',
+  'WHATSAPP_PHONE_ID',
+  'WHATSAPP_VERIFY_TOKEN',
+  'OPENROUTER_API_KEY',
+  'MANAGER_PHONE',
+];
+const missing = REQUIRED_VARS.filter((v) => !process.env[v]);
+if (missing.length) {
+  logger.warn(`Missing environment variables: ${missing.join(', ')}`);
+}
+if (!process.env.WHATSAPP_APP_SECRET) {
+  logger.warn('WHATSAPP_APP_SECRET not set — webhook signature verification disabled');
+}
+
+// Bind to 0.0.0.0 so Railway can reach the server from outside the container
+const server = app.listen(PORT, '0.0.0.0', () => {
   logger.info(`Fashion Store WhatsApp Bot running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
