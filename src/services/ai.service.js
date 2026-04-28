@@ -26,16 +26,20 @@ Rules:
 
 /**
  * Calls the OpenRouter API and returns a parsed AI response object.
- * Retries once on HTTP 429 with a 60-second delay.
+ *
+ * On 429 (rate limit): escalates immediately — waiting 60s blocks the customer
+ * for no good reason on a free-tier model. Instant escalation is better UX.
  *
  * @param {string} customerMessage - The raw message from the customer
  * @param {Array<Object>} products  - Matched products from the product service
  * @returns {Promise<{ intent: string, reply: string, needs_escalation: boolean, escalation_reason: string }>}
  */
 export async function getAIResponse(customerMessage, products) {
+  // Limit product context to top 5 matches to keep the prompt small and fast
+  const topProducts = products.slice(0, 5);
   const productContext =
-    products.length > 0
-      ? JSON.stringify(products, null, 2)
+    topProducts.length > 0
+      ? JSON.stringify(topProducts, null, 2)
       : 'No matching products found in the catalog.';
 
   const userContent = `Customer message: "${customerMessage}"
@@ -46,19 +50,21 @@ ${productContext}`;
   try {
     return await callOpenRouter(userContent);
   } catch (err) {
-    if (err.response?.status === 429) {
-      logger.warn('OpenRouter rate limited — retrying in 60 seconds');
-      await sleep(60_000);
-      try {
-        return await callOpenRouter(userContent);
-      } catch (retryErr) {
-        // Second failure — skip AI entirely, escalate to manager
-        logger.error('OpenRouter rate limited twice — auto-escalating');
-        return escalationFallback('OpenRouter rate limit exceeded after retry');
-      }
+    const status = err.response?.status;
+
+    if (status === 429) {
+      // Rate limited — escalate immediately rather than making customer wait
+      logger.warn('OpenRouter rate limited — escalating immediately (check OPENROUTER_API_KEY in Railway)');
+      return escalationFallback('OpenRouter rate limit — check your API key and free-tier quota');
     }
-    // Any other error (network, auth, etc.) — escalate instead of crash
-    logger.error('OpenRouter call failed', { status: err.response?.status, message: err.message });
+
+    if (status === 401 || status === 403) {
+      logger.error('OpenRouter auth failed — OPENROUTER_API_KEY is invalid or expired');
+      return escalationFallback('OpenRouter API key invalid — update OPENROUTER_API_KEY in Railway Variables');
+    }
+
+    // Network error, timeout, or unexpected status
+    logger.error('OpenRouter call failed', { status, message: err.message });
     return escalationFallback(`AI service error: ${err.message}`);
   }
 }
@@ -143,7 +149,3 @@ function escalationFallback(reason) {
   };
 }
 
-/** @param {number} ms */
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
