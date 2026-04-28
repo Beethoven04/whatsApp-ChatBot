@@ -8,7 +8,7 @@ const REQUIRED_VARS = [
   'WHATSAPP_TOKEN',
   'WHATSAPP_PHONE_ID',
   'WHATSAPP_VERIFY_TOKEN',
-  'OPENROUTER_API_KEY',
+  'GOOGLE_API_KEY',
   'MANAGER_PHONE',
 ];
 const missing = REQUIRED_VARS.filter((v) => !process.env[v]);

@@ -1,8 +1,10 @@
 import axios from 'axios';
 import logger from '../utils/logger.js';
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+// Google AI Studio — OpenAI-compatible endpoint.
+// Free tier: 10 RPM, 500 req/day. Get a key at: https://aistudio.google.com/apikey
+const GOOGLE_AI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+const MODEL = 'gemini-2.5-flash-preview-05-20';
 
 const SYSTEM_PROMPT = `You are a WhatsApp customer support agent for a fashion store.
 Answer ONLY from the product data provided in the user message.
@@ -48,35 +50,34 @@ Relevant product data:
 ${productContext}`;
 
   try {
-    return await callOpenRouter(userContent);
+    return await callGoogleAI(userContent);
   } catch (err) {
     const status = err.response?.status;
 
     if (status === 429) {
-      // Rate limited — escalate immediately rather than making customer wait
-      logger.warn('OpenRouter rate limited — escalating immediately (check OPENROUTER_API_KEY in Railway)');
-      return escalationFallback('OpenRouter rate limit — check your API key and free-tier quota');
+      logger.warn('Google AI rate limited — escalating immediately');
+      return escalationFallback('Google AI rate limit hit — free tier allows 10 RPM / 500 req/day');
     }
 
     if (status === 401 || status === 403) {
-      logger.error('OpenRouter auth failed — OPENROUTER_API_KEY is invalid or expired');
-      return escalationFallback('OpenRouter API key invalid — update OPENROUTER_API_KEY in Railway Variables');
+      logger.error('Google AI auth failed — GOOGLE_API_KEY is invalid or expired. Get a key at aistudio.google.com/apikey');
+      return escalationFallback('Google AI API key invalid — update GOOGLE_API_KEY in Railway Variables');
     }
 
     // Network error, timeout, or unexpected status
-    logger.error('OpenRouter call failed', { status, message: err.message });
+    logger.error('Google AI call failed', { status, message: err.message });
     return escalationFallback(`AI service error: ${err.message}`);
   }
 }
 
 /**
- * Makes the HTTP request to OpenRouter and parses the JSON response.
+ * Makes the HTTP request to Google AI (OpenAI-compatible endpoint) and parses the response.
  * @param {string} userContent
  * @returns {Promise<Object>}
  */
-async function callOpenRouter(userContent) {
+async function callGoogleAI(userContent) {
   const response = await axios.post(
-    OPENROUTER_URL,
+    GOOGLE_AI_URL,
     {
       model: MODEL,
       messages: [
@@ -88,10 +89,8 @@ async function callOpenRouter(userContent) {
     },
     {
       headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        Authorization: `Bearer ${process.env.GOOGLE_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://whatsapp-chatbot-production-0171.up.railway.app',
-        'X-Title': 'Fashion Store WhatsApp Bot',
       },
       timeout: 30_000,
     }
