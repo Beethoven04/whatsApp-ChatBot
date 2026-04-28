@@ -5,6 +5,10 @@ import logger from './utils/logger.js';
 
 const app = express();
 
+// Required for express-rate-limit to read the real client IP behind Railway's proxy.
+// Without this, rate-limit throws a ValidationError about X-Forwarded-For.
+app.set('trust proxy', 1);
+
 // Security headers
 app.use(helmet());
 

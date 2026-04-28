@@ -1,3 +1,20 @@
+/**
+ * HOW TO GET A PERMANENT WHATSAPP TOKEN
+ * --------------------------------------
+ * Temporary tokens (from the API Setup page) expire every 24 hours.
+ * To get a permanent token:
+ *
+ * 1. Go to business.facebook.com → Settings → System Users
+ * 2. Create a System User (or use an existing one) with ADMIN role
+ * 3. Click "Add Assets" → select your WhatsApp Business Account → grant FULL CONTROL
+ * 4. Click "Generate New Token" on that System User
+ * 5. Select your App, set token expiry to "Never"
+ * 6. Grant permissions: whatsapp_business_messaging, whatsapp_business_management
+ * 7. Copy the token and set it as WHATSAPP_TOKEN in Railway environment variables
+ *
+ * Reference: https://developers.facebook.com/docs/whatsapp/business-management-api/get-started
+ */
+
 import axios from 'axios';
 import logger from '../utils/logger.js';
 import { maskPhone } from '../utils/messageParser.js';
@@ -26,11 +43,7 @@ export async function sendMessage(phone, text) {
 
     logger.info('Message sent', { to: maskPhone(phone) });
   } catch (err) {
-    logger.error('Failed to send WhatsApp message', {
-      to: maskPhone(phone),
-      status: err.response?.status,
-      error: err.response?.data?.error?.message ?? err.message,
-    });
+    logApiError('Failed to send WhatsApp message', err, { to: maskPhone(phone) });
   }
 }
 
@@ -74,10 +87,7 @@ export async function sendEscalationAlert(customerPhone, customerName, customerM
 
     logger.info('Escalation alert sent to manager');
   } catch (err) {
-    logger.error('Failed to send escalation alert', {
-      status: err.response?.status,
-      error: err.response?.data?.error?.message ?? err.message,
-    });
+    logApiError('Failed to send escalation alert', err);
   }
 }
 
@@ -98,11 +108,8 @@ export async function markAsRead(messageId) {
       { headers: buildHeaders() }
     );
   } catch (err) {
-    // Non-critical — log and continue
-    logger.warn('Could not mark message as read', {
-      messageId,
-      error: err.response?.data?.error?.message ?? err.message,
-    });
+    // Non-critical — never block the main reply flow
+    logApiError('Could not mark message as read (non-critical)', err, { messageId }, 'warn');
   }
 }
 
@@ -115,4 +122,26 @@ function buildHeaders() {
     Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
     'Content-Type': 'application/json',
   };
+}
+
+/**
+ * Logs a Meta API error with a clear TOKEN_EXPIRED message on 401.
+ * @param {string} context
+ * @param {Error} err
+ * @param {Object} [extra]
+ * @param {'error'|'warn'} [level]
+ */
+function logApiError(context, err, extra = {}, level = 'error') {
+  const status = err.response?.status;
+  const message = err.response?.data?.error?.message ?? err.message;
+
+  if (status === 401) {
+    logger[level](`${context} — TOKEN_EXPIRED: regenerate WHATSAPP_TOKEN at developers.facebook.com`, {
+      ...extra,
+      status,
+    });
+    return;
+  }
+
+  logger[level](context, { ...extra, status, error: message });
 }
